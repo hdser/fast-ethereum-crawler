@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  std/[options, strutils, tables, sets],
+  std/[options, strutils, tables, sets, math],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, stew/byteutils, stew/bitops2,
   eth/keys, eth/net/nat,
@@ -150,9 +150,11 @@ proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
 proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [CancelledError]).} =
-  info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
 
-  var ethNodes: HashSet[seq[byte]]
+  var queuedNodes: HashSet[Node] = d.randomNodes(int.high).toHashSet
+  var measuredNodes: HashSet[Node]
+
+  info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
 
   let ps =
     try:
@@ -162,44 +164,48 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
       quit QuitFailure
   defer: ps.close()
   try:
-    ps.writeLine("pubkey,node_id,fork_digest,ip:port,attnets,attnets_number")
+    ps.writeLine("ip:port")
   except IOError as e:
     fatal "Failed to write to file", file = psFile, error = e.msg
     quit QuitFailure
 
-  while true:
+  proc measureOne(n: Node) {.async: (raises: [CancelledError]).} =
     let iTime = now(chronos.Moment)
-    let discovered = await d.queryRandom()
+    let find = await d.findNode(n, @[256'u16, 255'u16, 254'u16])
     let qDuration = now(chronos.Moment) - iTime
-    info "Lookup finished",  query_time = qDuration.secs, new_nodes = discovered.len, tot_peers=len(ethNodes)
+    if find.isOk():
+      let discovered = find[]
+      debug "findNode finished",  query_time = qDuration.secs, new_nodes = discovered.len, tot_peers=len(queuedNodes)
+      measuredNodes.incl(n)
 
-    for dNode in discovered:
-      let eth2 = dNode.record.tryGet("eth2", seq[byte])
-      let pubkey = dNode.record.tryGet("secp256k1", seq[byte])
-      let attnets = dNode.record.tryGet("attnets", seq[byte])
-      if eth2.isNone or attnets.isNone or pubkey.isNone: continue
-
-      if pubkey.get() in ethNodes: continue
-      ethNodes.incl(pubkey.get())
-
-      let forkDigest = eth2.get()
-
-      var bits = 0
-      for byt in attnets.get():
-        bits.inc(countOnes(byt.uint))
-
-      let str = "$#,$#,$#,$#,$#,$#"
-      let newLine =
-        try:
-          str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits]
-        except ValueError as e:
-          raiseAssert e.msg
       try:
+        let newLine = "$#" % [$n.address.get()]
         ps.writeLine(newLine)
+      except ValueError as e:
+        raiseAssert e.msg
       except IOError as e:
         fatal "Failed to write to file", file = psFile, error = e.msg
         quit QuitFailure
-    await sleepAsync(1.seconds) # 1 sec of delay
+
+      for dNode in discovered:
+        if not measuredNodes.contains(dNode):
+          queuedNodes.incl(dNode)
+
+    else:
+      debug "findNode failed"
+
+
+  while true:
+    try:
+      let n = queuedNodes.pop()
+      debug "measuring", n
+      await measureOne(n)
+
+      await sleepAsync(100.milliseconds) # 100 msec of delay
+    except KeyError:
+      info "no more nodes"
+      break
+
 
 
 proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
@@ -257,7 +263,8 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
     else:
       echo "No Talk Response message returned"
   of noCommand:
-    d.start()
+    # do not call start, otherwise we start with two findnodes to the same node, which fails
+    # d.start()
     waitFor(discover(d, config.persistingFile))
 
 when isMainModule:

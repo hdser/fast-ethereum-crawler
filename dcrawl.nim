@@ -154,6 +154,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
   var queuedNodes: HashSet[Node] = d.randomNodes(int.high).toHashSet
   var measuredNodes: HashSet[Node]
   var pendingQueries: seq[Future[void]]
+  var cycle = 0
 
   info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
 
@@ -165,7 +166,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
       quit QuitFailure
   defer: ps.close()
   try:
-    ps.writeLine("ip:port,rttMin,rttAvg,bwMaxMbps,bwAvgMbps")
+    ps.writeLine("cycle, ip:port, rttMin, rttAvg, bwMaxMbps, bwAvgMbps")
   except IOError as e:
     fatal "Failed to write to file", file = psFile, error = e.msg
     quit QuitFailure
@@ -187,7 +188,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
       measuredNodes.incl(n)
 
       try:
-        let newLine = "$#,$#,$#,$#,$#" % [$n.address.get(), $rttMin, $rttAvg, $bwMaxMbps, $bwAvgMbps]
+        let newLine = "$#,$#,$#,$#,$#,$#" % [$cycle, $n.address.get(), $rttMin, $rttAvg, $bwMaxMbps, $bwAvgMbps]
         ps.writeLine(newLine)
       except ValueError as e:
         raiseAssert e.msg
@@ -226,10 +227,10 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
         debug "pending queries, waiting"
         await sleepAsync(100.milliseconds)
       else:
-        info "no more nodes"
-        break
-
-
+        info "no more nodes in cycle, starting next cycle", cycle
+        cycle += 1
+        queuedNodes = measuredNodes
+        measuredNodes.clear
 
 proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
   let

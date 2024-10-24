@@ -149,6 +149,19 @@ proc parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
 proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
+proc ethDataExtract(dNode: Node ) : auto =
+  let eth2 = dNode.record.tryGet("eth2", seq[byte])
+  let pubkey = dNode.record.tryGet("secp256k1", seq[byte])
+  let attnets = dNode.record.tryGet("attnets", seq[byte])
+  let client = dNode.record.tryGet("client", seq[byte]) # EIP-7636
+
+  var bits = 0
+  if not attnets.isNone:
+    for byt in attnets.get():
+      bits.inc(countOnes(byt.uint))
+
+  (eth2, pubkey, attnets, bits, client)
+
 proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [CancelledError]).} =
 
   var queuedNodes: HashSet[Node] = d.randomNodes(int.high).toHashSet
@@ -166,7 +179,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
       quit QuitFailure
   defer: ps.close()
   try:
-    ps.writeLine("cycle, ip:port, rttMin, rttAvg, bwMaxMbps, bwAvgMbps")
+    ps.writeLine("cycle, node_id, ip:port, rttMin, rttAvg, bwMaxMbps, bwAvgMbps, pubkey, forkDigest, attnets, attnets_number, client")
   except IOError as e:
     fatal "Failed to write to file", file = psFile, error = e.msg
     quit QuitFailure
@@ -188,8 +201,11 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
       measuredNodes.incl(n)
 
       try:
-        let newLine = "$#,$#,$#,$#,$#,$#" % [$cycle, $n.address.get(), $rttMin, $rttAvg, $bwMaxMbps, $bwAvgMbps]
-        ps.writeLine(newLine)
+        let newLine = "$#,$#,$#,$#,$#,$#,$#" % [$cycle, n.id.toHex, $n.address.get(), $rttMin, $rttAvg, $bwMaxMbps, $bwAvgMbps]
+        let (pubkey, eth2, attnets, bits, client) = ethDataExtract(n)
+        let line2 = "$#,$#,$#,$#,$#" % [pubkey.get(@[]).toHex, eth2.get(@[0'u8,0,0,0])[0..3].toHex, attnets.get(@[]).toHex, $bits, $client.get(@[])]
+
+        ps.writeLine(newLine & ',' & line2)
       except ValueError as e:
         raiseAssert e.msg
       except IOError as e:

@@ -153,6 +153,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
 
   var queuedNodes: HashSet[Node] = d.randomNodes(int.high).toHashSet
   var measuredNodes: HashSet[Node]
+  var pendingQueries: seq[Future[void]]
 
   info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
 
@@ -201,17 +202,32 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
     else:
       debug "findNode failed"
 
+  proc measureAwaitOne(n: Node) {.async: (raises: [CancelledError]).} =
+    let f = measureOne(n)
+    pendingQueries.add(f)
+
+    await f
+
+    let index = pendingQueries.find(f)
+    if index != -1:
+      pendingQueries.del(index)
+    else:
+      error "Resulting query should have been in the pending queries"
 
   while true:
     try:
       let n = queuedNodes.pop()
       debug "measuring", n
-      await measureOne(n)
+      discard measureAwaitOne(n)
 
       await sleepAsync(100.milliseconds) # 100 msec of delay
     except KeyError:
-      info "no more nodes"
-      break
+      if pendingQueries.len > 0:
+        debug "pending queries, waiting"
+        await sleepAsync(100.milliseconds)
+      else:
+        info "no more nodes"
+        break
 
 
 

@@ -173,6 +173,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
 
   var queuedNodes: HashSet[Node] = d.randomNodes(int.high).toHashSet
   var measuredNodes: HashSet[Node]
+  var failedNodes: HashSet[Node]
   var pendingQueries: seq[Future[void]]
   var cycle = 0
 
@@ -224,6 +225,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
           queuedNodes.incl(dNode)
 
     else:
+      failedNodes.incl(n)
       debug "findNode failed"
 
   proc measureAwaitOne(n: Node) {.async: (raises: [CancelledError]).} =
@@ -250,10 +252,11 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
         debug "pending queries, waiting"
         await sleepAsync(100.milliseconds)
       else:
-        info "no more nodes in cycle, starting next cycle", cycle
+        info "no more nodes in cycle, starting next cycle", cycle, measured = measuredNodes.len, failed = failedNodes.len
         cycle += 1
         queuedNodes = measuredNodes
         measuredNodes.clear
+        failedNodes.clear
 
 proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
   let

@@ -1,3 +1,6 @@
 [submodule "vendor/nimbus-build-system"]
 	path = vendor/nimbus-build-system
 	url = https://github.com/status-im/nimbus-build-system.git
+[submodule "vendor/nim-eth"]
+	path = vendor/nim-eth
+	url = https://github.com/cskiraly/nim-eth.git

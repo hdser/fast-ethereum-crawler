@@ -22,6 +22,11 @@ const
   defaultListenAddressDesc = $defaultListenAddress
   defaultAdminListenAddressDesc = $defaultAdminListenAddress
 
+let dcrawlStartTime = chronos.Moment.now
+logScope:
+  topics = "dcrawl"
+  ts2 = (chronos.Moment.now - dcrawlStartTime).milliseconds
+
 type
   DiscoveryCmd* = enum
     noCommand
@@ -198,14 +203,22 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
     let qDuration = now(chronos.Moment) - iTime
     if find.isOk():
       let discovered = find[]
-      debug "findNode finished",  query_time = qDuration.secs, new_nodes = discovered.len, tot_peers=len(queuedNodes)
+      var queuedNew = 0
+      for dNode in discovered:
+        if not measuredNodes.contains(dNode):
+          queuedNodes.incl(dNode)
+          queuedNew += 1
+
+      debug "findNode finished",  query_time = qDuration.milliseconds,
+        received = discovered.len, new = queuedNew,
+        queued = queuedNodes.len, measured = measuredNodes.len, failed = failedNodes.len
       let
         rttMin = n.stats.rttMin.int
         rttAvg = n.stats.rttAvg.int
         bwMaxMbps = (n.stats.bwMax / 1e6).round(3)
         bwAvgMbps = (n.stats.bwAvg / 1e6).round(3)
 
-      debug "crawl", n, rttMin, rttAvg, bwMaxMbps, bwAvgMbps
+      trace "crawl", n, rttMin, rttAvg, bwMaxMbps, bwAvgMbps
       measuredNodes.incl(n)
 
       try:
@@ -219,10 +232,6 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
       except IOError as e:
         fatal "Failed to write to file", file = psFile, error = e.msg
         quit QuitFailure
-
-      for dNode in discovered:
-        if not measuredNodes.contains(dNode):
-          queuedNodes.incl(dNode)
 
     else:
       failedNodes.incl(n)
@@ -243,7 +252,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
   while true:
     try:
       let n = queuedNodes.pop()
-      debug "measuring", n
+      trace "measuring", n
       discard measureAwaitOne(n)
 
       await sleepAsync(100.milliseconds) # 100 msec of delay

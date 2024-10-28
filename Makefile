@@ -10,8 +10,7 @@ BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 	all \
 	deps \
 	update \
-	foo \
-	bar \
+	dcrawl \
 	clean
 
 ifeq ($(NIM_PARAMS),)
@@ -30,7 +29,7 @@ GIT_SUBMODULE_UPDATE := git submodule update --init --recursive
 else # "variables.mk" was included. Business as usual until the end of this file.
 
 # default target, because it's the first one that doesn't start with '.'
-all: | foo bar
+all: | dcrawl
 
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
@@ -45,12 +44,12 @@ update: | update-common
 	# Do you need to do something extra for this target?
 
 # building Nim programs
-foo bar: | build deps
+dcrawl: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) "$(NIMC)" c -o:build/$@ $(NIM_PARAMS) "$@.nim"
 
 clean: | clean-common
-	rm -rf build/{foo,bar}
+	rm -rf build/{dcrawl}
 
 endif # "variables.mk" was not included
 

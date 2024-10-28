@@ -44,7 +44,7 @@ update: | update-common
 	# Do you need to do something extra for this target?
 
 # building Nim programs
-dcrawl: | build deps
+dcrawl: | build deps nat-libs
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) "$(NIMC)" c -o:build/$@ $(NIM_PARAMS) "$@.nim"
 

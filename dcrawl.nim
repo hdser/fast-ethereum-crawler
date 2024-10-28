@@ -164,7 +164,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
       quit QuitFailure
   defer: ps.close()
   try:
-    ps.writeLine("ip:port")
+    ps.writeLine("ip:port,rttMin,rttAvg,bwMaxMbps,bwAvgMbps")
   except IOError as e:
     fatal "Failed to write to file", file = psFile, error = e.msg
     quit QuitFailure
@@ -176,10 +176,17 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
     if find.isOk():
       let discovered = find[]
       debug "findNode finished",  query_time = qDuration.secs, new_nodes = discovered.len, tot_peers=len(queuedNodes)
+      let
+        rttMin = n.stats.rttMin.int
+        rttAvg = n.stats.rttAvg.int
+        bwMaxMbps = (n.stats.bwMax / 1e6).round(3)
+        bwAvgMbps = (n.stats.bwAvg / 1e6).round(3)
+
+      debug "crawl", n, rttMin, rttAvg, bwMaxMbps, bwAvgMbps
       measuredNodes.incl(n)
 
       try:
-        let newLine = "$#" % [$n.address.get()]
+        let newLine = "$#,$#,$#,$#,$#" % [$n.address.get(), $rttMin, $rttAvg, $bwMaxMbps, $bwAvgMbps]
         ps.writeLine(newLine)
       except ValueError as e:
         raiseAssert e.msg

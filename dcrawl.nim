@@ -13,7 +13,7 @@ import
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, stew/byteutils, stew/bitops2,
   eth/keys, eth/net/nat,
-  eth/p2p/discoveryv5/[enr, node],
+  eth/p2p/discoveryv5/[enr, node, routing_table],
   eth/p2p/discoveryv5/protocol as discv5_protocol
 
 const
@@ -183,13 +183,18 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {
       let discovered = find[]
       var queuedNew = 0
       for dNode in discovered:
+        ## New nodes are those that are neither queud, nor measured.
+        ## Note that here we go based on Node hash, which is based on the
+        ## public key field only. Even if version or other fields differ,
+        ## we only keep the ENR we already had. TODO: check ENR versions
         if not measuredNodes.contains(dNode):
           queuedNodes.incl(dNode)
           queuedNew += 1
 
       debug "findNode finished",  query_time = qDuration.milliseconds,
         received = discovered.len, new = queuedNew,
-        queued = queuedNodes.len, measured = measuredNodes.len, failed = failedNodes.len
+        queued = queuedNodes.len, measured = measuredNodes.len, failed = failedNodes.len,
+        rtlen = d.routingTable.len
       let
         rttMin = n.stats.rttMin.int
         rttAvg = n.stats.rttAvg.int

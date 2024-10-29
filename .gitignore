@@ -1,0 +1,5 @@
+/results/
+/build/
+/.update.timestamp
+/nimbus-build-system.paths
+/vendor/.nimble/

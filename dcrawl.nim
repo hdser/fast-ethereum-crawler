@@ -78,6 +78,11 @@ type
       defaultValue: PrivateKey.random(keys.newRng()[])
       name: "nodekey" .}: PrivateKey
 
+    queryIntervalMs* {.
+      desc: "interval between findNode queries in millisecond",
+      defaultValue: 100
+      name: "query-interval-ms" .}: int
+
     metricsEnabled* {.
       defaultValue: false
       desc: "Enable the metrics server"
@@ -93,33 +98,6 @@ type
       defaultValue: 8008
       desc: "Listening HTTP port of the metrics server"
       name: "metrics-port" .}: Port
-
-    case cmd* {.
-      command
-      defaultValue: noCommand }: DiscoveryCmd
-    of noCommand:
-      discard
-    of ping:
-      pingTarget* {.
-        argument
-        desc: "ENR URI of the node to a send ping message"
-        name: "node" .}: Node
-    of findNode:
-      distance* {.
-        defaultValue: 255
-        desc: "Distance parameter for the findNode message"
-        name: "distance" .}: uint16
-      # TODO: Order here matters as else the help message does not show all the
-      # information, see: https://github.com/status-im/nim-confutils/issues/15
-      findNodeTarget* {.
-        argument
-        desc: "ENR URI of the node to send a findNode message"
-        name: "node" .}: Node
-    of talkReq:
-      talkReqTarget* {.
-        argument
-        desc: "ENR URI of the node to send a talkReq message"
-        name: "node" .}: Node
 
 proc parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
   let res = enr.Record.fromURI(p)
@@ -174,7 +152,7 @@ proc ethDataExtract(dNode: Node ) : auto =
 
   (pubkey, eth2, attnets, bits, client)
 
-proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [CancelledError]).} =
+proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {.async: (raises: [CancelledError]).} =
 
   var queuedNodes: HashSet[Node] = d.randomNodes(int.high).toHashSet
   var measuredNodes: HashSet[Node]
@@ -255,11 +233,11 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [Ca
       trace "measuring", n
       discard measureAwaitOne(n)
 
-      await sleepAsync(100.milliseconds) # 100 msec of delay
+      await sleepAsync(interval)
     except KeyError:
       if pendingQueries.len > 0:
         debug "pending queries, waiting"
-        await sleepAsync(100.milliseconds)
+        await sleepAsync(1.milliseconds)
       else:
         info "no more nodes in cycle, starting next cycle", cycle, measured = measuredNodes.len, failed = failedNodes.len
         cycle += 1
@@ -300,31 +278,9 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
         url, error_msg = exc.msg, error_name = exc.name
       quit QuitFailure
 
-  case config.cmd
-  of ping:
-    let pong = waitFor d.ping(config.pingTarget)
-    if pong.isOk():
-      echo pong[]
-    else:
-      echo "No Pong message returned"
-  of findNode:
-    let nodes = waitFor d.findNode(config.findNodeTarget, @[config.distance])
-    if nodes.isOk():
-      echo "Received valid records:"
-      for node in nodes[]:
-        echo $node.record & " - " & shortLog(node)
-    else:
-      echo "No Nodes message returned"
-  of talkReq:
-    let talkresp = waitFor d.talkReq(config.talkReqTarget, @[], @[])
-    if talkresp.isOk():
-      echo talkresp[]
-    else:
-      echo "No Talk Response message returned"
-  of noCommand:
-    # do not call start, otherwise we start with two findnodes to the same node, which fails
-    # d.start()
-    waitFor(discover(d, config.persistingFile))
+  # do not call start, otherwise we start with two findnodes to the same node, which fails
+  # d.start()
+  waitFor(discover(d, config.queryIntervalMs.milliseconds, config.persistingFile))
 
 when isMainModule:
   {.pop.}

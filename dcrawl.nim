@@ -170,7 +170,7 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {
       quit QuitFailure
   defer: ps.close()
   try:
-    ps.writeLine("cycle,node_id,ip:port,rttMin,rttAvg,bwMaxMbps,bwAvgMbps,pubkey,forkDigest,attnets,attnets_number,client")
+    ps.writeLine("cycle,node_id,ip:port,rttMin,rttAvg,bwMaxMbps,bwAvgMbps,pubkey,forkDigest,attnets,attnets_number,client, enr")
   except IOError as e:
     fatal "Failed to write to file", file = psFile, error = e.msg
     quit QuitFailure
@@ -208,8 +208,9 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {
         let newLine = "$#,$#,$#,$#,$#,$#,$#" % [$cycle, n.id.toHex, $n.address.get(), $rttMin, $rttAvg, $bwMaxMbps, $bwAvgMbps]
         let (pubkey, eth2, attnets, bits, client) = ethDataExtract(n)
         let line2 = "$#,$#,$#,$#,$#" % [pubkey.get(@[]).toHex, eth2.get(@[0'u8,0,0,0])[0..3].toHex, attnets.get(@[]).toHex, $bits, client.get(@[]).toString]
+        let line3 = "'" & $n.record & "'"
 
-        ps.writeLine(newLine & ',' & line2)
+        ps.writeLine(newLine & ',' & line2 & ',' & line3)
       except ValueError as e:
         raiseAssert e.msg
       except IOError as e:

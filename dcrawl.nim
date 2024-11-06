@@ -78,10 +78,10 @@ type
       defaultValue: PrivateKey.random(keys.newRng()[])
       name: "nodekey" .}: PrivateKey
 
-    queryIntervalMs* {.
-      desc: "interval between findNode queries in millisecond",
-      defaultValue: 100
-      name: "query-interval-ms" .}: int
+    queryIntervalUs* {.
+      desc: "interval between findNode queries in microsecond",
+      defaultValue: 100000
+      name: "query-interval-us" .}: int
 
     metricsEnabled* {.
       defaultValue: false
@@ -286,7 +286,7 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
 
   # do not call start, otherwise we start with two findnodes to the same node, which fails
   # d.start()
-  waitFor(discover(d, config.queryIntervalMs.milliseconds, config.persistingFile))
+  waitFor(discover(d, config.queryIntervalUs.microseconds, config.persistingFile))
 
 when isMainModule:
   {.pop.}

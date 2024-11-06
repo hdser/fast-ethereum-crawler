@@ -9,6 +9,22 @@
 Tool to crawl the Ethereum network, based on the nim language implementation of the Discovery v5 protocol,
 part of the nim-eth library.
 
+## Prerequisites
+
+Thanks to the included nimbus-build-system, the library is almost self-contained,
+requiring only `git` and a c compiler to build and run.
+
+## Quick start
+
+```
+# download dependencies and build compiler
+make -j4 update
+# build the crawler
+make -j4
+# run the crawler with ethereum boot node
+./run.sh
+```
+
 ## License
 
 Licensed and distributed under either of

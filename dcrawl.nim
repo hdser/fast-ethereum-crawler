@@ -158,6 +158,7 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {
   var measuredNodes: HashSet[Node]
   var failedNodes: HashSet[Node]
   var pendingQueries: seq[Future[void]]
+  var discoveredNodes = initCountTable[Node]()
   var cycle = 0
 
   info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
@@ -187,14 +188,19 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {
         ## Note that here we go based on Node hash, which is based on the
         ## public key field only. Even if version or other fields differ,
         ## we only keep the ENR we already had. TODO: check ENR versions
-        if not measuredNodes.contains(dNode):
+        #if not measuredNodes.contains(dNode) and not queuedNodes.contains(dNode):
+        if not discoveredNodes.contains(dNode):
           queuedNodes.incl(dNode)
           queuedNew += 1
+        discoveredNodes.inc(dNode)
 
       debug "findNode finished",  query_time = qDuration.milliseconds,
         received = discovered.len, new = queuedNew,
         queued = queuedNodes.len, measured = measuredNodes.len, failed = failedNodes.len,
-        rtlen = d.routingTable.len
+        rtlen = d.routingTable.len,
+        pending = pendingQueries.len,
+        discovered = discoveredNodes.len
+
       let
         rttMin = n.stats.rttMin.int
         rttAvg = n.stats.rttAvg.int

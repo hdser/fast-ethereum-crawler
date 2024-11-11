@@ -5,6 +5,9 @@ BOOTNODE="enr:-Ku4QHqVeJ8PPICcWk1vSn_XcSkjOkNiTg6Fmii5j6vUQgvzMc9L1goFnLKgXqBJsp
 WORKDIR="results/`date -Iseconds`"
 echo $WORKDIR
 mkdir -p "$WORKDIR"
-cd "$WORKDIR"
+git diff > $WORKDIR/git.diff
+git status > $WORKDIR/git.status
+git describe --always > $WORKDIR/git.describe
 
+cd "$WORKDIR"
 ../../build/dcrawl --bootnode="$BOOTNODE" "$@"

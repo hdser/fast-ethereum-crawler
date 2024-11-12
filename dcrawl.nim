@@ -199,9 +199,10 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, fullCycles:int,
   except IOError as e:
     fatal "Failed to write to file", file = dsFile, error = e.msg
     quit QuitFailure
-  proc measureOne(n: Node) {.async: (raises: [CancelledError]).} =
+
+  proc measureOne(n: Node, distances: seq[uint16]) {.async: (raises: [CancelledError]).} =
     let iTime = now(chronos.Moment)
-    let find = await d.findNode(n, @[256'u16, 255'u16, 254'u16])
+    let find = await d.findNode(n, distances)
     let qDuration = now(chronos.Moment) - iTime
     if find.isOk():
       let discovered = find[]
@@ -266,8 +267,8 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, fullCycles:int,
       failedNodes.incl(n)
       debug "findNode failed"
 
-  proc measureAwaitOne(n: Node) {.async: (raises: [CancelledError]).} =
-    let f = measureOne(n)
+  proc measureAwaitOne(n: Node, distances: seq[uint16]) {.async: (raises: [CancelledError]).} =
+    let f = measureOne(n, distances)
     pendingQueries.add(f)
 
     await f
@@ -279,22 +280,31 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, fullCycles:int,
       error "Resulting query should have been in the pending queries"
 
   while cycle < fullCycles:
-    try:
-      let n = queuedNodes.pop()
-      trace "measuring", n
-      discard measureAwaitOne(n)
+    #for distances in @[@[256'u16], @[255'u16], @[254'u16]]:#, @[253'u16], @[252'u16], @[251'u16]]:
+    var d = 0
+    let drange = 16
+    block:
+      for retry in 0 .. 0:
+        while true:
+          try:
+            let n = queuedNodes.pop()
+            trace "measuring", n, dist=256-d
+            discard measureAwaitOne(n, @[(256-d).uint16])
+            d = (d+1) mod drange
 
-      await sleepAsync(interval)
-    except KeyError:
-      if pendingQueries.len > 0:
-        debug "pending queries, waiting"
-        await sleepAsync(1.milliseconds)
-      else:
-        info "no more nodes in cycle, starting next cycle", cycle, measured = measuredNodes.len, failed = failedNodes.len
-        cycle += 1
-        queuedNodes = measuredNodes
-        measuredNodes.clear
-        failedNodes.clear
+            await sleepAsync(interval)
+          except KeyError:
+            if pendingQueries.len > 0:
+              debug "pending queries, waiting"
+              await sleepAsync(1.milliseconds)
+            else:
+              queuedNodes = failedNodes
+              failedNodes.clear
+              break
+      queuedNodes = measuredNodes
+      failedNodes.clear
+    info "no more nodes in cycle, starting next cycle", cycle, measured = measuredNodes.len, failed = failedNodes.len
+    cycle += 1
 
 proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
   let

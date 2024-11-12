@@ -12,7 +12,7 @@ part of the nim-eth library.
 ## Prerequisites
 
 Thanks to the included nimbus-build-system, the library is almost self-contained,
-requiring only `git` and a c compiler to build and run.
+requiring only `git` and a C compiler to build and run.
 
 ## Quick start
 
@@ -23,6 +23,11 @@ make -j4 update
 make -j4
 # run the crawler with ethereum boot node
 ./run.sh
+```
+
+Configuration options:
+```
+./run.sh --help
 ```
 
 ## License

@@ -170,6 +170,7 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, fullCycles:int,
   var failedNodes: HashSet[Node]
   var pendingQueries: seq[Future[void]]
   var discoveredNodes: HashSet[Node]
+  var enrsReceived: int64
   var cycle = 0
 
   info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
@@ -206,6 +207,8 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, fullCycles:int,
     let qDuration = now(chronos.Moment) - iTime
     if find.isOk():
       let discovered = find[]
+      enrsReceived += discovered.len
+
       var queuedNew = 0
       for dNode in discovered:
         ## New nodes are those that are neither queud, nor measured.
@@ -217,7 +220,6 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, fullCycles:int,
           queuedNodes.incl(dNode)
           queuedNew += 1
           discoveredNodes.incl(dNode)
-
           debug "discoveredNew", id=dNode.id.toHex, addr=dNode.address.get(), enrv=dNode.record.seqNum
           try:
             let newLine = "$#,$#,$#" % [$cycle, dNode.id.toHex, $dNode.address.get()]
@@ -239,7 +241,9 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, fullCycles:int,
         queued = queuedNodes.len, measured = measuredNodes.len, failed = failedNodes.len,
         rtlen = d.routingTable.len,
         pending = pendingQueries.len,
-        discovered = discoveredNodes.len
+        discovered = discoveredNodes.len,
+        receivedSum = enrsReceived,
+        distances
 
       let
         rttMin = n.stats.rttMin.int
@@ -265,7 +269,7 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, fullCycles:int,
 
     else:
       failedNodes.incl(n)
-      debug "findNode failed"
+      debug "findNode failed", id=n.id.toHex, addr=n.address.get(), query_time = qDuration.milliseconds, enrv=n.record.seqNum
 
   proc measureAwaitOne(n: Node, distances: seq[uint16]) {.async: (raises: [CancelledError]).} =
     let f = measureOne(n, distances)

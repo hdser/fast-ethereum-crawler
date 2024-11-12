@@ -53,8 +53,13 @@ type
 
     persistingFile* {.
       defaultValue: "peerstore.csv",
-      desc: "File where the tool will keep the discovered records"
+      desc: "File where the tool will keep the measured records"
       name: "persisting-file" .}: string
+
+    discoveryFile* {.
+      defaultValue: "discovery.csv",
+      desc: "File where the tool will keep the discovered records"
+      name: "discovery-file" .}: string
 
     bootnodes* {.
       desc: "ENR URI of node to bootstrap discovery with. Argument may be repeated"
@@ -82,6 +87,11 @@ type
       desc: "interval between findNode queries in microsecond",
       defaultValue: 100000
       name: "query-interval-us" .}: int
+
+    fullCycles* {.
+      desc: "full measurement cycles to run",
+      defaultValue: 1
+      name: "cycles" .}: int
 
     metricsEnabled* {.
       defaultValue: false
@@ -152,7 +162,8 @@ proc ethDataExtract(dNode: Node ) : auto =
 
   (pubkey, eth2, attnets, bits, client)
 
-proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {.async: (raises: [CancelledError]).} =
+proc discover(d: discv5_protocol.Protocol, interval: Duration, fullCycles:int,
+              psFile: string, dsFile: string) {.async: (raises: [CancelledError]).} =
 
   var queuedNodes: HashSet[Node] = d.randomNodes(int.high).toHashSet
   var measuredNodes: HashSet[Node]
@@ -176,6 +187,18 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {
     fatal "Failed to write to file", file = psFile, error = e.msg
     quit QuitFailure
 
+  let ds =
+    try:
+      open(dsFile, fmWrite)
+    except IOError as e:
+      fatal "Failed to open file for writing", file = dsFile, error = e.msg
+      quit QuitFailure
+  defer: ds.close()
+  try:
+    ds.writeLine("cycle,node_id,ip:port,pubkey,forkDigest,attnets,attnets_number,client, enr")
+  except IOError as e:
+    fatal "Failed to write to file", file = dsFile, error = e.msg
+    quit QuitFailure
   proc measureOne(n: Node) {.async: (raises: [CancelledError]).} =
     let iTime = now(chronos.Moment)
     let find = await d.findNode(n, @[256'u16, 255'u16, 254'u16])
@@ -194,7 +217,23 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {
           queuedNew += 1
           discoveredNodes.incl(dNode)
 
-      debug "findNode finished",  query_time = qDuration.milliseconds,
+          debug "discoveredNew", id=dNode.id.toHex, addr=dNode.address.get(), enrv=dNode.record.seqNum
+          try:
+            let newLine = "$#,$#,$#" % [$cycle, dNode.id.toHex, $dNode.address.get()]
+            let (pubkey, eth2, attnets, bits, client) = ethDataExtract(dNode)
+            let line2 = "$#,$#,$#,$#,$#" % [pubkey.get(@[]).toHex, eth2.get(@[0'u8,0,0,0])[0..3].toHex, attnets.get(@[]).toHex, $bits, client.get(@[]).toString]
+            let line3 = "'" & $dNode.record & "'"
+
+            ds.writeLine(newLine & ',' & line2 & ',' & line3)
+          except ValueError as e:
+            raiseAssert e.msg
+          except IOError as e:
+            fatal "Failed to write to file", file = dsFile, error = e.msg
+            quit QuitFailure
+        else:
+          debug "discoveredOld", id=dNode.id.toHex, addr=dNode.address.get(), enrv=dNode.record.seqNum
+
+      debug "findNode finished",  id=n.id.toHex, query_time = qDuration.milliseconds,
         received = discovered.len, new = queuedNew,
         queued = queuedNodes.len, measured = measuredNodes.len, failed = failedNodes.len,
         rtlen = d.routingTable.len,
@@ -239,7 +278,7 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {
     else:
       error "Resulting query should have been in the pending queries"
 
-  while true:
+  while cycle < fullCycles:
     try:
       let n = queuedNodes.pop()
       trace "measuring", n
@@ -292,7 +331,8 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
 
   # do not call start, otherwise we start with two findnodes to the same node, which fails
   # d.start()
-  waitFor(discover(d, config.queryIntervalUs.microseconds, config.persistingFile))
+  waitFor(discover(d, config.queryIntervalUs.microseconds,
+                   config.fullCycles, config.persistingFile, config.discoveryFile))
 
 when isMainModule:
   {.pop.}

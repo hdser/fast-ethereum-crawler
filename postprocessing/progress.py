@@ -14,9 +14,19 @@ progress.plot(x='ts2', y=['queued', 'measured', 'failed', 'discovered', 'pending
               figsize=(10, 5),
               title='measurement progress',
               xlabel='time since start [seconds]',
+              ylabel='number of nodes',
               #xlim=(0,600)
               )
 plt.savefig('progress.png')
+
+progress.plot(x='ts2', y=['queued', 'measured', 'failed', 'discovered', 'pending'],
+              figsize=(10, 5),
+              title='measurement progress',
+              xlabel='time since start [seconds]',
+              ylabel='number of nodes',
+              xlim=(0,10), ylim=(0,30000)
+              )
+plt.savefig('progress10.png')
 
 print(progress[['ts2_bin', 'new']].groupby('ts2_bin').mean())
 progress[['ts2_bin', 'new']].groupby('ts2_bin').mean().plot(y=['new'],
@@ -26,3 +36,10 @@ progress[['ts2_bin', 'new']].groupby('ts2_bin').mean().plot(y=['new'],
               #xlim=(0,600)
               )
 plt.savefig('new.png')
+
+discovery = logs[((logs['msg'] == 'discoveredNew') | (logs['msg'] == 'discoveredOld'))]
+print(discovery.columns)
+print(discovery)
+print(discovery.describe)
+print(discovery.nunique())
+print(discovery['id'].value_counts())

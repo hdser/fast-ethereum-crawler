@@ -158,7 +158,7 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {
   var measuredNodes: HashSet[Node]
   var failedNodes: HashSet[Node]
   var pendingQueries: seq[Future[void]]
-  var discoveredNodes = initCountTable[Node]()
+  var discoveredNodes: HashSet[Node]
   var cycle = 0
 
   info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
@@ -192,7 +192,7 @@ proc discover(d: discv5_protocol.Protocol, interval: Duration, psFile: string) {
         if not discoveredNodes.contains(dNode):
           queuedNodes.incl(dNode)
           queuedNew += 1
-        discoveredNodes.inc(dNode)
+          discoveredNodes.incl(dNode)
 
       debug "findNode finished",  query_time = qDuration.milliseconds,
         received = discovered.len, new = queuedNew,

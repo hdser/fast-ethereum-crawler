@@ -85,7 +85,7 @@ type
 
     queryIntervalUs* {.
       desc: "interval between findNode queries in microsecond",
-      defaultValue: 100000
+      defaultValue: 1000
       name: "query-interval-us" .}: int
 
     fullCycles* {.

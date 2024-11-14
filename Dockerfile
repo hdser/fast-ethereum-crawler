@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y \
     git \
     libpcre3 \
     libpcre3-dev \
+    libssl-dev \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

@@ -46,10 +46,9 @@ update: | update-common
 # building Nim programs
 dcrawl: | build deps nat-libs
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) "$(NIMC)" c -o:build/$@ $(NIM_PARAMS) "$@.nim"
+		$(ENV_SCRIPT) "$(NIMC)" c --path:src -o:build/$@ $(NIM_PARAMS) src/$@.nim
 
 clean: | clean-common
 	rm -rf build/{dcrawl}
 
 endif # "variables.mk" was not included
-

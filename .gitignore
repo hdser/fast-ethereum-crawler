@@ -4,3 +4,4 @@
 /nimbus-build-system.paths
 /vendor/.nimble/
 /venv/
+.env
